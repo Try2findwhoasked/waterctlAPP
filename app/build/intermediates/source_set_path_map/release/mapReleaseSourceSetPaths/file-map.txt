@@ -1,0 +1,7 @@
+com.waterctl.android.app-pngs-0 D:\Documents\VSCode\waterctlAnd\app\build\generated\res\pngs\release
+com.waterctl.android.app-resValues-1 D:\Documents\VSCode\waterctlAnd\app\build\generated\res\resValues\release
+com.waterctl.android.app-packageReleaseResources-2 D:\Documents\VSCode\waterctlAnd\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
+com.waterctl.android.app-packageReleaseResources-3 D:\Documents\VSCode\waterctlAnd\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
+com.waterctl.android.app-release-4 D:\Documents\VSCode\waterctlAnd\app\build\intermediates\merged_res\release\mergeReleaseResources
+com.waterctl.android.app-main-5 D:\Documents\VSCode\waterctlAnd\app\src\main\res
+com.waterctl.android.app-release-6 D:\Documents\VSCode\waterctlAnd\app\src\release\res

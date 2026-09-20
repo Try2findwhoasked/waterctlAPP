@@ -1,0 +1,4 @@
+#Sun Sep 20 21:02:53 CST 2026
+base.0=D\:\\Documents\\VSCode\\waterctlAnd\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
+renamed.0=classes.dex
+path.0=classes.dex

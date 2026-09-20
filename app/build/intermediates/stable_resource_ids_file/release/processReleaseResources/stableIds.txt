@@ -1,0 +1,4 @@
+com.waterctl.android:style/AppTheme = 0x7f040000
+com.waterctl.android:mipmap/ic_launcher = 0x7f030000
+com.waterctl.android:drawable/ic_launcher_foreground = 0x7f020000
+com.waterctl.android:color/ic_launcher_background = 0x7f010000
