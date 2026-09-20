@@ -58,9 +58,19 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 
 ## 保活机制
 
-1. **前台服务**：会话期间以 `connectedDevice` 类型运行 `BleService`，降低被杀概率。
-2. **`PARTIAL_WAKE_LOCK`**：锁屏后保持 CPU 运行，BLE GATT 连接持续存活。
-3. **自动重连**：断链后指数退避（3s 起、每次 ×2、上限 30s）。
-4. **60s 探针**：会话活跃期周期性检查 GATT 连接状态。
+1. **已启动的前台服务（关键）**：会话通过 `Context.startForegroundService()` +
+   `BleService.onStartCommand(ACTION_START)` 启动，而不是只依赖 `bindService()`。
+   纯绑定服务会在最后一个客户端 `unbindService()` 时被系统立即销毁，而 Activity 在
+   息屏 / 切后台时正好会 `onStop()` → `unbindService()`。这正是早期版本"锁屏就断、
+   亮屏显示空闲"的根因（服务连同 GATT、WakeLock、重连定时器一起被销毁）。
+2. **`connectedDevice` 类型 + `stopWithTask="false"`**：前台服务不随任务栈移除而停止，
+   划掉最近任务不会结束会话。
+3. **`PARTIAL_WAKE_LOCK`**：锁屏后保持 CPU 运行，BLE GATT 连接持续存活。
+4. **自动重连**：断链后指数退避（3s 起、每次 ×2、上限 30s）；服务常驻，故锁屏期间
+   仍能按计划重连。
+5. **60s 探针**：会话活跃期周期性检查 GATT 连接状态。
+6. **电池优化豁免**：启动会话时通过 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+   请求一次豁免，避免 Doze / App Standby 限制后台定时器与蓝牙访问。
 
-> 注意：部分国产 ROM（MIUI/EMUI 等）需手动开启"自启动/后台运行/允许后台弹出"权限，否则系统可能拦截前台服务与自启。
+> 注意：部分国产 ROM（MIUI/EMUI/HyperOS 等）除电池优化外，还需手动开启"自启动"
+> 与"后台弹出界面"权限，否则系统可能在息屏后冻结整个进程。

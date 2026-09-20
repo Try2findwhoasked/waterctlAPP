@@ -1,0 +1,22 @@
+# 构建产物
+build/
+app/build/
+.gradle/
+
+# 本地配置（含机器相关路径，不应共享）
+local.properties
+
+# APK / AAB / dex
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# IDE / 编辑器
+.idea/
+*.iml
+.vscode/
+
+# 操作系统杂项
+.DS_Store
+Thumbs.db

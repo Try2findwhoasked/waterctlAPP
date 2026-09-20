@@ -27,6 +27,9 @@
     <!-- keep BLE alive while screen off -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- ask the user to exempt the app from Doze/battery optimisation -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
@@ -51,7 +54,8 @@
         <service
             android:name=".BleService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false" />
     </application>
 
 </manifest>

@@ -195,8 +195,8 @@ class MainActivity : Activity() {
         // ---- action buttons (2 x 2) ----
         scanButton = actionButton("扫描设备") { startScan() }
         startButton = actionButton("开始会话") { startSelected() }
-        endButton = actionButton("结束会话") { service?.end() }
-        stopButton = actionButton("停止重连") { service?.stopReconnect() }
+        endButton = actionButton("结束会话") { endSession() }
+        stopButton = actionButton("停止重连") { hardStopSession() }
 
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row1.addView(scanButton, weightParams())
@@ -528,7 +528,93 @@ class MainActivity : Activity() {
         val displayName = deviceNames[idx].substringBefore("\n")
         saveLastDevice(deviceAddresses[idx], displayName)
         quickConnectButton.text = quickConnectLabel()
-        service?.start(deviceAddresses[idx], displayName)
+        startSessionService(deviceAddresses[idx], displayName)
+    }
+
+    /**
+     * Start the session through [startForegroundService] instead of the local
+     * binder.
+     *
+     * A service that is only created by [bindService] is destroyed by the
+     * platform the instant the last client unbinds - which happens as soon as
+     * the activity is stopped, i.e. when the screen turns off. That silently
+     * killed the GATT link, the wake lock and every reconnect timer.
+     * [startForegroundService] turns the service into a *started* foreground
+     * service that outlives the activity.
+     */
+    private fun startSessionService(address: String, name: String) {
+        requestBatteryOptimizationExemption()
+        val intent = Intent(this, BleService::class.java).apply {
+            action = BleService.ACTION_START
+            putExtra(BleService.EXTRA_ADDRESS, address)
+            putExtra(BleService.EXTRA_DEVICE, name)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            appendLog("启动前台服务失败: ${e.message}")
+            // fall back to the already-bound instance
+            service?.start(address, name)
+        }
+    }
+
+    /**
+     * Doze / app-standby throttling is what usually kills long-lived BLE links on
+     * OEM ROMs. Ask once for an exemption so the foreground service keeps its
+     * timers and radio access while the screen is off.
+     */
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager ?: return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        try {
+            startActivity(
+                Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(android.net.Uri.parse("package:$packageName")),
+            )
+            appendLog("→ 已请求忽略电池优化（建议允许，否则锁屏后可能被系统限制）")
+        } catch (e: Exception) {
+            appendLog("无法请求电池优化豁免: ${e.message}")
+        }
+    }
+
+    /** End the session via the service so it also works if the binder is gone. */
+    private fun endSession() {
+        val svc = service
+        if (svc != null) {
+            svc.end()
+        } else {
+            try {
+                startService(
+                    Intent(this, BleService::class.java).apply {
+                        action = BleService.ACTION_END
+                    },
+                )
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** Hard-stop the session / reconnect loop. */
+    private fun hardStopSession() {
+        val svc = service
+        if (svc != null) {
+            svc.stopReconnect()
+        } else {
+            try {
+                startService(
+                    Intent(this, BleService::class.java).apply {
+                        action = BleService.ACTION_STOP
+                    },
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun prefs() = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -562,7 +648,7 @@ class MainActivity : Activity() {
             return
         }
         appendLog("→ 一键连接上次设备 $lastName ($lastAddress)")
-        service?.start(lastAddress, lastName)
+        startSessionService(lastAddress, lastName)
     }
 
     private fun refreshStatus() {

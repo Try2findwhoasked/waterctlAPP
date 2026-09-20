@@ -47,11 +47,22 @@ class BleService : Service() {
         const val ACTION_ERROR = "com.waterctl.android.ERROR"
         const val ACTION_SCAN_RESULT = "com.waterctl.android.SCAN_RESULT"
 
+        // Commands delivered through onStartCommand. Using an Intent (instead of
+        // the local binder alone) is what makes this a *started* foreground
+        // service. A purely bound service is destroyed by the platform the moment
+        // the activity unbinds - which happens on screen-off - so the BLE link,
+        // wake lock and reconnect timers all died with it.
+        const val ACTION_START = "com.waterctl.android.START"
+        const val ACTION_END = "com.waterctl.android.END"
+        const val ACTION_STOP = "com.waterctl.android.STOP"
+
         const val EXTRA_PHASE = "phase"
         const val EXTRA_DEVICE_NAME = "device_name"
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_ADDRESSES = "addresses"
         const val EXTRA_NAMES = "names"
+        const val EXTRA_ADDRESS = "address"
+        const val EXTRA_DEVICE = "device"
 
         const val CHANNEL_ID = "waterctl_session"
 
@@ -118,6 +129,9 @@ class BleService : Service() {
     private var startEpiloguePending: Boolean = false
     private var stopping: Boolean = false
 
+    // tracked so we never call startForeground() twice for the same promotion
+    private var isForeground: Boolean = false
+
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val reconnectRunnable = Runnable { attemptConnection() }
@@ -161,6 +175,51 @@ class BleService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> {
+                val address = intent.getStringExtra(EXTRA_ADDRESS)
+                val name = intent.getStringExtra(EXTRA_DEVICE).orEmpty()
+                if (address.isNullOrEmpty()) {
+                    emitError("缺少设备地址")
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
+                // Promote to foreground FIRST. startForegroundService() gives us
+                // only ~5s to call startForeground(); doing it before any early
+                // -return path guarantees we never miss that deadline.
+                deviceAddress = address
+                deviceName = name
+                startForegroundNotification()
+                startSession(address, name)
+            }
+
+            ACTION_END -> {
+                end()
+                // If there was nothing to end (idle), do not leave an empty
+                // started service behind.
+                if (phase == Phase.Idle) stopSelf(startId)
+            }
+
+            ACTION_STOP -> {
+                stopReconnect()
+                if (phase == Phase.Idle) stopSelf(startId)
+            }
+
+            else -> Unit
+        }
+        // No sticky restart: a BLE session cannot be resumed after the process is
+        // gone, so a platform-recreated service has nothing useful to do.
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // The service is started and foreground; swiping the app off the recents
+        // list must not end the running session.
+        emitLog("app removed from recents; session keeps running")
+        super.onTaskRemoved(rootIntent)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -218,7 +277,14 @@ class BleService : Service() {
         }, 3_000)
     }
 
-    fun start(address: String, name: String) {
+    fun start(address: String, name: String) = startSession(address, name)
+
+    /**
+     * Enter the foreground and begin a session. Must be called from the main
+     * thread; the first statement raises the notification so the platform's 5s
+     * `startForegroundService` deadline is respected.
+     */
+    private fun startSession(address: String, name: String) {
         if (phase == Phase.Active || phase == Phase.Starting) {
             emitError("已有会话进行中")
             return
@@ -437,6 +503,7 @@ class BleService : Service() {
             }
         } catch (_: Exception) {
         }
+        isForeground = false
         stopSelf()
         setPhase(Phase.Idle)
         emitLog("session finished")
@@ -699,6 +766,7 @@ class BleService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        isForeground = true
     }
 
     private fun updateForegroundNotification() {
