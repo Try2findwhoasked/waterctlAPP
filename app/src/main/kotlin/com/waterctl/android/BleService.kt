@@ -37,7 +37,8 @@ import com.waterctl.android.protocol.makeStartEpilogue
 import com.waterctl.android.protocol.makeUnlockResponse
 
 // Android BLE port of the water-heater session state machine (see
-// waterctlEle/src-tauri/src/ble.rs). Runs inside a ForegroundService so the
+// https://github.com/celesWuff/waterctl/blob/2.x/src/bluetooth.ts).
+// Runs inside a ForegroundService so the
 // BLE link stays alive while the screen is off / app is in background.
 class BleService : Service() {
 
@@ -558,7 +559,7 @@ class BleService : Service() {
         }
     }
 
-    // ---- RXD dispatch (mirror of Rust handle_rxd) ----
+    // ---- RXD dispatch (mirror of the upstream handleRxd) ----
 
     private fun handleRxd(value: ByteArray) {
         emitLog("RXD: ${bufferToHexString(value)}")

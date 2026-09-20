@@ -1,7 +1,7 @@
 package com.waterctl.android.protocol
 
-// Direct Kotlin port of `deputy.wat`'s `makeKey` function (and the Rust port
-// in waterctlEle/crates/protocol/src/deputy.rs).
+// Direct Kotlin port of `deputy.wat`'s `makeKey` function from
+// https://github.com/celesWuff/waterctl/blob/2.x/src/deputy.wat.
 //
 // The original WASM operates on a single 64 KiB memory page. The first 2096
 // bytes are initialised from a lookup table (`DEPUTY_DATA`), the rest of the

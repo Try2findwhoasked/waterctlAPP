@@ -1,7 +1,7 @@
 package com.waterctl.android.protocol
 
-// CRC-16 implementations mirroring `src/algorithms.ts` (and
-// waterctlEle/crates/protocol/src/algorithms.rs).
+// CRC-16 implementations mirroring
+// https://github.com/celesWuff/waterctl/blob/2.x/src/algorithms.ts.
 
 // CRC-16/ChangGong
 // width=16 poly=0x8005 init=0xe808 refin=true refout=true xorout=0x0000

@@ -1,7 +1,7 @@
 package com.waterctl.android.protocol
 
-// Utility functions mirroring `src/utils.ts` (and
-// waterctlEle/crates/protocol/src/utils.rs).
+// Utility functions mirroring
+// https://github.com/celesWuff/waterctl/blob/2.x/src/utils.ts.
 
 // Explanation: 42 => 0x42 (decimal digit -> BCD nibble)
 // Bug-for-bug compatible with the TypeScript implementation, including the

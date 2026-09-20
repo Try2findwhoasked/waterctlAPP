@@ -4,8 +4,8 @@ import java.time.ZonedDateTime
 import java.time.ZoneId
 import kotlin.random.Random
 
-// Session payload builders mirroring `src/solvers.ts` (and
-// waterctlEle/crates/protocol/src/solvers.rs).
+// Session payload builders mirroring
+// https://github.com/celesWuff/waterctl/blob/2.x/src/solvers.ts.
 
 private val SHANGHAI: ZoneId = ZoneId.of("Asia/Shanghai")
 

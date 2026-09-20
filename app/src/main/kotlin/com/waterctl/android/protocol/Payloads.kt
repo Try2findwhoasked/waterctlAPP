@@ -1,7 +1,7 @@
 package com.waterctl.android.protocol
 
-// Fixed BLE payloads mirroring `src/payloads.ts` (and
-// waterctlEle/crates/protocol/src/payloads.rs).
+// Fixed BLE payloads mirroring
+// https://github.com/celesWuff/waterctl/blob/2.x/src/payloads.ts.
 
 // send this first, then wait for B0, B1, or AE
 internal val START_PROLOGUE = byteArrayOf(

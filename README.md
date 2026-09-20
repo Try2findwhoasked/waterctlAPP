@@ -1,6 +1,6 @@
 # waterctl-android
 
-蓝牙水控器 FOSS 的安卓原生版本，基于已验证的 `waterctlEle`（Rust）协议库直译为 Kotlin。
+蓝牙水控器 FOSS 的安卓原生版本，基于已验证的 [waterctl](https://github.com/celesWuff/waterctl)（TypeScript）协议实现直译为 Kotlin。
 
 ## 技术栈
 
@@ -10,18 +10,20 @@
 
 ## 协议移植
 
+移植自 [celesWuff/waterctl](https://github.com/celesWuff/waterctl)（默认分支 `2.x`）的 `src/` 协议实现。
+
 `app/src/main/kotlin/com/waterctl/android/protocol/` 下：
 
-| 文件 | 对应 Rust 源 | 说明 |
-|------|-------------|------|
-| `Deputy.kt` | `crates/protocol/src/deputy.rs` | `makeKey` 直译 |
-| `DeputyData.kt` | `crates/protocol/src/deputy_data.rs` | 2096 字节查找表（自动生成） |
-| `Algorithms.kt` | `crates/protocol/src/algorithms.rs` | CRC-16/ChangGong、CRC-16/CGAEAF |
-| `Payloads.kt` | `crates/protocol/src/payloads.rs` | 固定 BLE 载荷 |
-| `Utils.kt` | `crates/protocol/src/utils.rs` | `dec_as_hex`、hex 字符串 |
-| `Solvers.kt` | `crates/protocol/src/solvers.rs` | unlock response / start epilogue |
+| 文件 | 对应源文件 | 说明 |
+|------|-----------|------|
+| `Deputy.kt` | [`src/deputy.wat`](https://github.com/celesWuff/waterctl/blob/2.x/src/deputy.wat) | `makeKey` 直译 |
+| `DeputyData.kt` | `src/deputy.wat` | 2096 字节查找表（自动生成） |
+| `Algorithms.kt` | [`src/algorithms.ts`](https://github.com/celesWuff/waterctl/blob/2.x/src/algorithms.ts) | CRC-16/ChangGong、CRC-16/CGAEAF |
+| `Payloads.kt` | [`src/payloads.ts`](https://github.com/celesWuff/waterctl/blob/2.x/src/payloads.ts) | 固定 BLE 载荷 |
+| `Utils.kt` | [`src/utils.ts`](https://github.com/celesWuff/waterctl/blob/2.x/src/utils.ts) | `dec_as_hex`、hex 字符串 |
+| `Solvers.kt` | [`src/solvers.ts`](https://github.com/celesWuff/waterctl/blob/2.x/src/solvers.ts) | unlock response / start epilogue |
 
-`DeputyData.kt` 由 `tools/gen-deputy-kotlin.mjs` 从 deputy.wat 数据段自动生成，勿手改。
+`DeputyData.kt` 由 `tools/gen-deputy-kotlin.mjs` 从 [celesWuff/waterctl](https://github.com/celesWuff/waterctl/blob/2.x/src/deputy.wat) 的 `deputy.wat` 数据段自动生成，勿手改。
 
 ## 构建
 
