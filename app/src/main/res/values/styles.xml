@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+        浅色主题。targetSdk 35 起系统强制边到边绘制，状态栏/导航栏会变成透明并浮在
+        内容之上，因此必须把图标显式声明为深色（windowLightStatusBar /
+        windowLightNavigationBar），否则深色图标会变成浅色、在 #F5F6F8 上看不清。
+        内容避让刘海与导航栏由各 Activity 的 applySystemInsets() 处理。
+    -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
 </resources>

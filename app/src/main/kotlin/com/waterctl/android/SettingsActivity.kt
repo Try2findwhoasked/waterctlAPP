@@ -3,10 +3,12 @@ package com.waterctl.android
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -38,12 +40,46 @@ class SettingsActivity : Activity() {
             cornerRadius = dp(radiusDp).toFloat()
         }
 
+    /**
+     * targetSdk 35 起系统强制「边到边」绘制，内容会延伸进状态栏（刘海 / 挖孔所在区域）
+     * 与导航栏。这里把系统安全区换算成根布局的内边距，避免顶部被遮挡。
+     */
+    private fun applySystemInsets(view: View, left: Int, top: Int, right: Int, bottom: Int) {
+        view.setOnApplyWindowInsetsListener { v, insets ->
+            val l: Int
+            val t: Int
+            val r: Int
+            val b: Int
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+                )
+                l = bars.left
+                t = bars.top
+                r = bars.right
+                b = bars.bottom
+            } else {
+                @Suppress("DEPRECATION")
+                l = insets.systemWindowInsetLeft
+                @Suppress("DEPRECATION")
+                t = insets.systemWindowInsetTop
+                @Suppress("DEPRECATION")
+                r = insets.systemWindowInsetRight
+                @Suppress("DEPRECATION")
+                b = insets.systemWindowInsetBottom
+            }
+            v.setPadding(left + l, top + t, right + r, bottom + b)
+            insets
+        }
+        view.requestApplyInsets()
+    }
+
     private fun buildLayout(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
             setBackgroundColor(Color.parseColor("#F5F6F8"))
         }
+        applySystemInsets(root, dp(16), dp(16), dp(16), dp(16))
 
         // ---- back bar ----
         val bar = LinearLayout(this).apply {
