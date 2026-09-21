@@ -25,9 +25,39 @@
 
 `DeputyData.kt` 由 `tools/gen-deputy-kotlin.mjs` 从 [celesWuff/waterctl](https://github.com/celesWuff/waterctl/blob/2.x/src/deputy.wat) 的 `deputy.wat` 数据段自动生成，勿手改。
 
+## 图标
+
+源图放在 `tools/icon/images.png`（**不能放进 `res/`**，res 只接受已识别的资源类型与 `.xml` 文件），
+由 `tools/gen-icons.py`（Python + Pillow）生成：
+
+```powershell
+python tools\gen-icons.py
+```
+
+生成内容（每种密度：mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi）：
+
+| 文件 | 尺寸 | 用途 |
+| --- | --- | --- |
+| `mipmap-*/ic_launcher.png` | 48–192 px | API 25 及以下的传统图标 |
+| `mipmap-*/ic_launcher_round.png` | 48–192 px | 传统圆形图标（`android:roundIcon`） |
+| `mipmap-*/ic_launcher_foreground.png` | 108–432 px | 自适应图标前景层，画面只占中心 72dp，任何启动器遮罩下都完整可见 |
+
+自适应图标配置：`mipmap-anydpi-v26/ic_launcher.xml` 与 `ic_launcher_round.xml`，
+背景层使用 `@color/ic_launcher_background`（`#FBF9FC`，取自源图左上角底色，换图后需同步 `values/colors.xml`）。
+未声明 `monochrome` 层——彩色插画被系统取 alpha 后会变成纯色方块。
+
 ## 构建
 
 前置：JDK 17、Android SDK（`platforms;android-35`、`build-tools;35.0.0`）、Gradle 8.13。
+
+`tools\build.cmd` 会固定使用 JDK 17（系统默认 `JAVA_HOME` 可能指向更高版本，AGP 8.7.3 不支持）：
+
+```powershell
+tools\build.cmd assembleDebug             # 调试版（已签名，可直接 adb install）
+tools\build.cmd assembleDebug assembleRelease
+```
+
+等价的手动方式：
 
 ```powershell
 $env:JAVA_HOME = "D:\java\jdk-17"

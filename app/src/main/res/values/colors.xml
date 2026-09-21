@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1565C0</color>
+    <!-- 与 app/src/main/res/icon/images.png 左上角底色一致，用于自适应图标的背景层 -->
+    <color name="ic_launcher_background">#FBF9FC</color>
 </resources>
