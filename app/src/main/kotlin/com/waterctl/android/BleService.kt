@@ -171,7 +171,7 @@ class BleService : Service() {
         val g = gatt ?: return@Runnable
         val t = txd ?: return@Runnable
         val payload = makeStartEpilogue(deviceName, false)
-        emitLog("TX start epilogue: ${bufferToHexString(payload)}")
+        emitTxLog("start epilogue", payload)
         write(g, t, payload)
     }
 
@@ -329,7 +329,7 @@ class BleService : Service() {
                 val g = gatt
                 val t = txd
                 if (g != null && t != null) {
-                    emitLog("TX end prologue: ${bufferToHexString(END_PROLOGUE)}")
+                    emitTxLog("end prologue", END_PROLOGUE)
                     write(g, t, END_PROLOGUE)
                 } else {
                     emitLog("no live link while ending, disconnecting")
@@ -451,7 +451,7 @@ class BleService : Service() {
             onLinkLost()
             return
         }
-        emitLog("TX start prologue: ${bufferToHexString(START_PROLOGUE)}")
+        emitTxLog("start prologue", START_PROLOGUE)
         write(g, t, START_PROLOGUE)
     }
 
@@ -611,7 +611,7 @@ class BleService : Service() {
                     emitError(e.message ?: "Bad unlock request")
                     return
                 }
-                emitLog("TX unlock response: ${bufferToHexString(response)}")
+                emitTxLog("unlock response", response)
                 write(g, t, response)
                 startEpiloguePending = false
                 handler.removeCallbacks(startEpilogueRunnable)
@@ -620,7 +620,7 @@ class BleService : Service() {
             0xAF -> when (payload.getOrNull(5)?.toInt()?.and(0xff)) {
                 0x55 -> {
                     val epilogue = makeStartEpilogue(deviceName, true)
-                    emitLog("TX start epilogue: ${bufferToHexString(epilogue)}")
+                    emitTxLog("start epilogue", epilogue)
                     write(g, t, epilogue)
                 }
 
@@ -630,6 +630,7 @@ class BleService : Service() {
 
                 else -> {
                     val epilogue = makeStartEpilogue(deviceName, true)
+                    emitTxLog("start epilogue", epilogue)
                     write(g, t, epilogue)
                     emitError("WATERCTL INTERNAL Unknown RXD data")
                 }
@@ -646,7 +647,7 @@ class BleService : Service() {
             }
 
             0xB3 -> {
-                emitLog("TX end epilogue: ${bufferToHexString(END_EPILOGUE)}")
+                emitTxLog("end epilogue", END_EPILOGUE)
                 write(g, t, END_EPILOGUE)
                 teardownGatt()
                 finishSession()
@@ -655,12 +656,12 @@ class BleService : Service() {
             0xAA, 0xB5, 0xB8 -> Unit
 
             0xBA -> {
-                emitLog("TX BA ack: ${bufferToHexString(BA_ACK)}")
+                emitTxLog("BA ack", BA_ACK)
                 write(g, t, BA_ACK)
             }
 
             0xBC -> {
-                emitLog("TX offlinebomb fix: ${bufferToHexString(OFFLINEBOMB_FIX)}")
+                emitTxLog("offlinebomb fix", OFFLINEBOMB_FIX)
                 write(g, t, OFFLINEBOMB_FIX)
             }
 
@@ -806,6 +807,16 @@ class BleService : Service() {
         val intent = Intent(ACTION_LOG)
         intent.putExtra(EXTRA_MESSAGE, message)
         broadcast(intent)
+    }
+
+    /**
+     * Log an outgoing packet. Suppressed entirely when the user turns off
+     * "设置 → 在日志中显示发送的数据包"; the preference is re-read on every call so
+     * toggling it takes effect immediately, even mid-session.
+     */
+    private fun emitTxLog(label: String, payload: ByteArray) {
+        if (!Prefs.logPackets(this)) return
+        emitLog("TX $label: ${bufferToHexString(payload)}")
     }
 
     private fun emitError(message: String) {

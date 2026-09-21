@@ -3,6 +3,7 @@ package com.waterctl.android
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
@@ -26,15 +27,18 @@ import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
 
     companion object {
-        private const val PREFS_NAME = "waterctl"
-        private const val KEY_LAST_ADDRESS = "last_address"
-        private const val KEY_LAST_NAME = "last_name"
+        private const val MENU_SETTINGS = 1
+        private const val MENU_ABOUT = 2
+
+        /** 关于页展示的上游仓库地址 */
+        private const val REPO_URL = "https://github.com/celesWuff/waterctl"
     }
 
     private var service: BleService? = null
@@ -165,6 +169,40 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(16), dp(16), dp(12))
             setBackgroundColor(Color.parseColor("#F5F6F8"))
         }
+
+        // ---- title bar with the overflow menu ----
+        val titleBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleBar.addView(
+            TextView(this).apply {
+                text = "蓝牙水控器"
+                textSize = 20f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(Color.parseColor("#212121"))
+            },
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        titleBar.addView(
+            Button(this).apply {
+                text = "⋮"
+                textSize = 22f
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(dp(12), 0, dp(12), 0)
+                contentDescription = "更多"
+                setOnClickListener { showOverflowMenu(it) }
+            },
+        )
+        root.addView(
+            titleBar,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(12) },
+        )
 
         // ---- status card ----
         statusCard = LinearLayout(this).apply {
@@ -617,21 +655,15 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun prefs() = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
     private fun loadLastDevice() {
-        val p = prefs()
-        lastAddress = p.getString(KEY_LAST_ADDRESS, "").orEmpty()
-        lastName = p.getString(KEY_LAST_NAME, "").orEmpty()
+        lastAddress = Prefs.lastAddress(this)
+        lastName = Prefs.lastName(this)
     }
 
     private fun saveLastDevice(address: String, name: String) {
         lastAddress = address
         lastName = name
-        prefs().edit()
-            .putString(KEY_LAST_ADDRESS, address)
-            .putString(KEY_LAST_NAME, name)
-            .apply()
+        Prefs.saveLastDevice(this, address, name)
     }
 
     private fun quickConnectLabel(): String =
@@ -649,6 +681,56 @@ class MainActivity : Activity() {
         }
         appendLog("→ 一键连接上次设备 $lastName ($lastAddress)")
         startSessionService(lastAddress, lastName)
+    }
+
+    // ---- overflow menu (设置 / 关于) ----
+
+    private fun showOverflowMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_SETTINGS, 0, "设置")
+        popup.menu.add(0, MENU_ABOUT, 1, "关于")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_SETTINGS -> {
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                    true
+                }
+
+                MENU_ABOUT -> {
+                    showAboutDialog()
+                    true
+                }
+
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun showAboutDialog() {
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+        } catch (_: Exception) {
+            "?"
+        }
+        val message = buildString {
+            append("蓝牙水控器 FOSS 安卓原生版\n")
+            append("版本 $version\n\n")
+            append("协议移植自 celesWuff/waterctl（TypeScript）的 2.x 分支，")
+            append("以 Kotlin 重写，不含任何第三方运行时依赖。\n\n")
+            append("免责声明\n")
+            append("• 本程序仅供对已获授权的水控设备进行操作，请遵守设备管理方的规定。\n")
+            append("• 请勿用于任何非法用途；因使用本程序造成的设备损坏、费用损失")
+            append("或其它后果，由使用者自行承担。\n")
+            append("• 开始使用即表示您已理解并接受上述条款。\n\n")
+            append("许可证：MIT\n")
+            append("仓库：$REPO_URL")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("关于")
+            .setMessage(message)
+            .setPositiveButton("确定", null)
+            .show()
     }
 
     private fun refreshStatus() {
