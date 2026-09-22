@@ -5,9 +5,6 @@
 如果你发现了安全问题，请**不要**直接开公开 Issue，改用 GitHub 的
 [私密漏洞报告](https://github.com/Try2findwhoasked/waterctlAPP/security/advisories/new) 提交。
 
-请在报告中说明：影响的版本、复现步骤、可能的后果，以及（如有）修复建议。
-我会在确认后尽快回应并在修复发布时致谢。
-
 ## 支持的版本
 
 仅维护最新发布版本。旧版本的问题请在确认最新版仍存在后再报告。
