@@ -12,6 +12,15 @@ local.properties
 *.ap_
 *.dex
 
+# 签名文件（不要提交私钥）
+*.jks
+
+# 临时文件
+tools/commitmsg.tmp
+
+# 由 tools/gen-icons.py 生成的预览图
+tools/icon/preview.png
+
 # IDE / 编辑器
 .idea/
 *.iml

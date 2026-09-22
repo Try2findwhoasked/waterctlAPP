@@ -2,6 +2,19 @@
 
 蓝牙水控器 FOSS 的安卓原生版本，基于已验证的 [waterctl](https://github.com/celesWuff/waterctl)（TypeScript）协议实现直译为 Kotlin。
 
+## 下载与安装
+
+从 [Releases](https://github.com/Try2findwhoasked/waterctlAPP/releases) 下载最新 APK 并安装（无需 root，不申请网络权限）。
+
+| 文件 | 包名 | 说明 |
+| --- | --- | --- |
+| `app-release.apk` | `com.waterctl.android` | 发布版，已用 `waterctl-release.keystore` 签名 |
+| `app-debug.apk` | `com.waterctl.android` | 调试版，可直接 `adb install` |
+
+要求：Android 8.0（API 26）及以上，且设备支持蓝牙 4.0（BLE）。
+
+也可以自行构建，见[构建](#构建)章节。
+
 ## 技术栈
 
 - 原生 Kotlin（无第三方运行时依赖，仅 Kotlin stdlib）
@@ -68,6 +81,8 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 .\gradlew.bat assembleRelease # 发布版（用 waterctl-release.keystore 签名）
 ```
 
+`local.properties` 含本机 SDK 路径，不入版本库（由 Android Studio 或 `sdk.dir=` 自行生成）。
+
 产物：
 
 - `app/build/outputs/apk/debug/app-debug.apk`
@@ -75,7 +90,7 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 
 ## 界面
 
-- 顶部标题栏：左侧应用名，右侧 `⋮` 打开溢出菜单，含「设置」与「关于」（关于页包含版本、协议来源、许可证与免责声明）。
+- 顶部标题栏：左侧应用名，右侧 `⋮` 打开溢出菜单，含「设置」与「关于」（关于页包含版本、协议来源、许可证与免责声明）；版面按 `WindowInsets` 安全区留边，适配刘海与挖孔屏。
 - 状态卡：实时显示会话状态（空闲 / 连接中 / 会话进行中 / 正在重连 / 正在结束）与当前设备，并按状态着色。
 - 2×2 操作按钮：扫描设备 / 开始会话 / 结束会话 / 停止重连；按钮可用性随状态联动（例如会话进行中时禁用扫描与开始，空闲时禁用结束）。
 - 一键连接：按钮位于操作区下方，点击后直接以「上次成功开始的设备」建立会话，无需重新扫描。设备地址与名称保存在 `SharedPreferences`（`waterctl` / `last_address`、`last_name`），标签会显示上次设备名（如「一键连接: 浴室水控」），无记录时禁用。
@@ -90,6 +105,19 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 | 设置项 | 默认 | 说明 |
 | --- | --- | --- |
 | 在日志中显示发送的数据包 | 开 | 以 `TX` 前缀显示本机发出的数据包（十六进制）。关闭后日志更简洁；接收到的数据包（`RXD`）始终显示。 |
+
+## 权限
+
+应用只申请与蓝牙会话直接相关的权限，**不申请网络权限**，所有数据都留在本机。
+
+| 权限 | 用途 |
+| --- | --- |
+| `BLUETOOTH` / `BLUETOOTH_ADMIN`（API ≤ 30） | 传统蓝牙访问 |
+| `BLUETOOTH_SCAN`（`neverForLocation`）/ `BLUETOOTH_CONNECT`（API 31+） | 扫描与连接 BLE 设备 |
+| `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`（API ≤ 30） | Android 11 及以下，系统要求扫描 BLE 必须授予位置权限（应用本身不做定位） |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_CONNECTED_DEVICE` | 会话期间的前台服务，保证锁屏后连接不中断 |
+| `WAKE_LOCK` | 锁屏后维持 CPU 运行 |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | 请求加入电池优化白名单，避免 Doze 冻结重连定时器 |
 
 ## 会话结束
 
@@ -116,3 +144,18 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 
 > 注意：部分国产 ROM（MIUI/EMUI/HyperOS 等）除电池优化外，还需手动开启"自启动"
 > 与"后台弹出界面"权限，否则系统可能在息屏后冻结整个进程。
+
+## 免责声明
+
+- 本程序仅供对**已获授权**的水控设备进行操作，请遵守设备管理方的规定。
+- 请勿用于任何非法用途；因使用本程序造成的设备损坏、费用损失或其它后果，
+  由使用者自行承担。
+- 本项目与任何水控设备厂商无关，也未获得其授权或认可。
+
+## 许可与致谢
+
+本项目以 [MIT 许可证](LICENSE) 发布。
+
+- 协议实现移植自 [celesWuff/waterctl](https://github.com/celesWuff/waterctl)（MIT），
+  版权归原作者所有，详见 [LICENSE](LICENSE)。
+- 感谢上游作者对水控器 BLE 协议的分析与开源。

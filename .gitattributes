@@ -1,0 +1,20 @@
+# 统一换行符，避免 Windows 上的 CRLF 警告与 diff 噪声
+* text=auto eol=lf
+
+# 二进制文件不做换行转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.apk binary
+*.aab binary
+*.wasm binary
+
+# Gradle wrapper 脚本保持各自平台风格
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+# 语言标注（GitHub 语言统计与高亮）
+*.kt   text diff=kotlin
+*.kts  text diff=kotlin
