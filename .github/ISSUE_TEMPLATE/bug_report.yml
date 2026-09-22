@@ -1,0 +1,71 @@
+name: Bug 反馈
+description: 报告功能异常或崩溃
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。涉及蓝牙连接的问题**务必附上应用内日志**，否则很难定位。
+
+        获取方式：主界面底部「日志」面板 → 长按可选中复制 → 粘贴到下面的日志框中。
+        建议先在「⋮ → 设置」中确认「在日志中显示发送的数据包」已开启，以便包含收发的数据包。
+  - type: input
+    id: app-version
+    attributes:
+      label: 应用版本
+      description: 在「⋮ → 关于」中可以看到
+      placeholder: 例如 1.0.1
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 手机型号与系统版本
+      placeholder: 例如 小米 14 / HyperOS 2.0（Android 15）
+    validations:
+      required: true
+  - type: input
+    id: water-controller
+    attributes:
+      label: 水控设备名称
+      description: 形如 Water34738，后 4 位数字是校验用的关键信息
+      placeholder: Water34738
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 点击「扫描设备」
+        2. 选择 Water34738
+        3. 点击「开始会话」
+        4. ……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 应用日志
+      description: 从日志面板复制粘贴（会以代码块格式显示）
+      render: text
+      placeholder: |
+        connecting to Water34738 (...)
+        connect+subscribe ok (Water34738)
+        TX start prologue: FEFE09B001010000
+        RXD: ...
+    validations:
+      required: true

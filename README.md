@@ -88,6 +88,22 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 - `app/build/outputs/apk/debug/app-debug.apk`
 - `app/build/outputs/apk/release/app-release.apk`
 
+> 签名说明：`waterctl-release.keystore` 若不存在（例如 fork 后未带私钥），
+> `assembleRelease` 会回退到 debug 签名，构建依旧可用。可用环境变量
+> `WATERCTL_KEYSTORE`、`WATERCTL_STORE_PASSWORD`、`WATERCTL_KEY_ALIAS`、
+> `WATERCTL_KEY_PASSWORD` 覆盖签名配置。
+
+## 发布流程
+
+1. 更新 `app/build.gradle.kts` 中的 `versionCode` / `versionName`，并在 `CHANGELOG.md` 记录改动。
+2. 提交并推送，确认 [Actions](../../actions/workflows/build.yml) 构建通过。
+3. 打标签并推送，工作流会自动创建 Release 并附上两个 APK：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
 ## 界面
 
 - 顶部标题栏：左侧应用名，右侧 `⋮` 打开溢出菜单，含「设置」与「关于」（关于页包含版本、协议来源、许可证与免责声明）；版面按 `WindowInsets` 安全区留边，适配刘海与挖孔屏。
