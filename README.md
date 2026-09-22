@@ -108,7 +108,7 @@ $env:ANDROID_SDK_ROOT = "D:\Documents\AndroidSDK"
 2. **`connectedDevice` 类型 + `stopWithTask="false"`**：前台服务不随任务栈移除而停止，
    划掉最近任务不会结束会话。
 3. **`PARTIAL_WAKE_LOCK`**：锁屏后保持 CPU 运行，BLE GATT 连接持续存活。
-4. **自动重连**：断链后指数退避（3s 起、每次 ×2、上限 30s）；服务常驻，故锁屏期间
+4. **自动重连**：断链后指数退避（1s 起、每次 ×2、上限 30s）；服务常驻，故锁屏期间
    仍能按计划重连。
 5. **60s 探针**：会话活跃期周期性检查 GATT 连接状态。
 6. **电池优化豁免**：启动会话时通过 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`

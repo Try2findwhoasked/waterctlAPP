@@ -75,7 +75,7 @@ class BleService : Service() {
 
         private const val HANDSHAKE_TIMEOUT_MS = 15_000L
         private const val CONNECTION_PROBE_INTERVAL_MS = 60_000L
-        private const val RECONNECT_BASE_MS = 3_000L
+        private const val RECONNECT_BASE_MS = 1_000L
         private const val RECONNECT_MAX_MS = 30_000L
         private const val START_EPILOGUE_DELAY_MS = 500L
 
@@ -367,7 +367,11 @@ class BleService : Service() {
         if (stopping) return
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
-            emitError("蓝牙未开启")
+            // Bluetooth may simply be toggling; reschedule instead of dropping the
+            // loop, otherwise the phase would stay Recovering forever and no
+            // further attempt would ever be made (UI stuck on "正在重连…").
+            emitError("蓝牙未开启，稍后重试")
+            scheduleReconnect()
             return
         }
         setPhase(Phase.Starting)
@@ -383,7 +387,10 @@ class BleService : Service() {
         val device: BluetoothDevice = try {
             adapter.getRemoteDevice(deviceAddress)
         } catch (e: Exception) {
+            // A malformed address is permanent: retrying forever would just keep
+            // the session in Recovering, so tear the session down instead.
             emitError("无效的设备地址: ${e.message}")
+            finishSession()
             return
         }
 
@@ -402,6 +409,7 @@ class BleService : Service() {
     }
 
     private fun onConnected(g: BluetoothGatt) {
+        if (g !== gatt) return // stale callback from a superseded link
         emitLog("connected, discovering services...")
         if (!g.discoverServices()) {
             emitLog("discoverServices returned false")
@@ -410,6 +418,7 @@ class BleService : Service() {
     }
 
     private fun onServicesDiscovered(g: BluetoothGatt) {
+        if (g !== gatt) return // stale callback from a superseded link
         var foundTxd: BluetoothGattCharacteristic? = null
         var foundRxd: BluetoothGattCharacteristic? = null
         for (s: BluetoothGattService in g.services) {
@@ -442,6 +451,7 @@ class BleService : Service() {
     }
 
     private fun afterSubscribed(g: BluetoothGatt) {
+        if (g !== gatt) return // stale callback from a superseded link
         if (stopping || phase == Phase.Stopping || phase == Phase.Idle) {
             emitLog("stale subscribe event ignored (phase=${phase.asStr})")
             return
@@ -463,6 +473,24 @@ class BleService : Service() {
             return
         }
         teardownGatt()
+        // Drop every timer that belonged to the dead link. The handshake timeout
+        // is only cancelled once B2 arrives, so without this a stale 15s timeout
+        // could fire *during* the backoff wait, bump `attempts` and push the next
+        // reconnect into a longer slot (also logging a bogus "handshake timeout").
+        cancelHandshake()
+        handler.removeCallbacks(startEpilogueRunnable)
+        handler.removeCallbacks(probeRunnable)
+        startEpiloguePending = false
+        scheduleReconnect()
+    }
+
+    /**
+     * Arm the next reconnect attempt with exponential backoff. Shared by
+     * [onLinkLost] and the "adapter unavailable" path in [attemptConnection] so
+     * the recovery loop can never be silently dropped while [phase] stays
+     * [Phase.Recovering].
+     */
+    private fun scheduleReconnect() {
         attempts += 1
         setPhase(Phase.Recovering)
         val delay = nextReconnectDelay(attempts)
@@ -728,7 +756,12 @@ class BleService : Service() {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
-            handler.post { handleRxd(value) }
+            handler.post {
+                // A notification queued on the old GATT can land after we have
+                // already swapped in a new link; acting on it would write stale
+                // handshake data to the fresh connection.
+                if (g === gatt) handleRxd(value)
+            }
         }
     }
 
