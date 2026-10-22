@@ -11,6 +11,8 @@ import android.view.View
 import android.view.WindowInsets
 import android.os.Build
 import android.widget.Button
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -72,6 +74,22 @@ internal object Ui {
         }
         background = RippleDrawable(ColorStateList.valueOf(0x22007068), fills, shape(context, Color.WHITE, 14))
         setOnClickListener { onClick() }
+    }
+
+    /** 工具栏图标使用固定画布，避免字体基线和字形留白造成视觉偏移。 */
+    fun iconButton(context: Context, icon: Int, description: String,
+                   onClick: (View) -> Unit) = ImageButton(context).apply {
+        setImageResource(icon)
+        imageTintList = ColorStateList.valueOf(accent)
+        scaleType = ImageView.ScaleType.CENTER
+        val padding = dp(context, 14)
+        setPadding(padding, padding, padding, padding)
+        minimumWidth = dp(context, 52)
+        minimumHeight = dp(context, 52)
+        background = RippleDrawable(ColorStateList.valueOf(0x22007068),
+            shape(context, Color.rgb(227, 242, 238), 14), shape(context, Color.WHITE, 14))
+        contentDescription = description
+        setOnClickListener { onClick(it) }
     }
 
     fun insets(view: View) {

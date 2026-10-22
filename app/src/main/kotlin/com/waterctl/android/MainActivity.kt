@@ -35,8 +35,8 @@ class MainActivity : Activity() {
         private const val MENU_SETTINGS = 1
         private const val MENU_ABOUT = 2
 
-        /** 关于页展示的上游仓库地址 */
-        private const val REPO_URL = "https://github.com/celesWuff/waterctl"
+        private const val REPO_URL = "https://github.com/Try2findwhoasked/waterctlAPP"
+        private const val UPSTREAM_URL = "https://github.com/celesWuff/waterctl"
     }
 
     private var service: BleService? = null
@@ -197,11 +197,9 @@ class MainActivity : Activity() {
         title.addView(Ui.text(this, "蓝牙水控器", 26f, bold = true))
         title.addView(Ui.text(this, "连接设备 · 轻松用水", 13f, Ui.muted))
         titleBar.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-        titleBar.addView(Ui.button(this, "⋮") { }.apply {
-            textSize = 24f
-            contentDescription = "更多选项：设置与关于"
-            setOnClickListener { showOverflowMenu(it) }
-        }, LinearLayout.LayoutParams(dp(52), -2))
+        titleBar.addView(Ui.iconButton(this, R.drawable.ic_more, "更多选项：设置与关于") {
+            showOverflowMenu(it)
+        }, LinearLayout.LayoutParams(dp(52), dp(52)))
         content.addView(titleBar, margin(bottom = 24))
 
         statusCard = Ui.card(this)
@@ -692,24 +690,81 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             "?"
         }
-        val message = buildString {
-            append("蓝牙水控器 FOSS 安卓原生版\n")
-            append("版本 $version\n\n")
-            append("协议移植自 celesWuff/waterctl（TypeScript）的 2.x 分支，")
-            append("以 Kotlin 重写，不含任何第三方运行时依赖。\n\n")
-            append("免责声明\n")
-            append("• 本程序仅供对已获授权的水控设备进行操作，请遵守设备管理方的规定。\n")
-            append("• 请勿用于任何非法用途；因使用本程序造成的设备损坏、费用损失")
-            append("或其它后果，由使用者自行承担。\n")
-            append("• 开始使用即表示您已理解并接受上述条款。\n\n")
-            append("许可证：MIT\n")
-            append("仓库：$REPO_URL")
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), dp(12))
         }
+        scroll.addView(content)
+        content.addView(android.widget.ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(12)
+        })
+        content.addView(Ui.text(this, "蓝牙水控器", 23f, bold = true).apply {
+            gravity = Gravity.CENTER
+        })
+        content.addView(Ui.text(this, "版本 $version · Android 原生版", 13f, Ui.muted).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(8))
+        })
+
+        fun section(title: String, body: String) {
+            content.addView(Ui.text(this, title, 16f, bold = true).apply {
+                setPadding(0, dp(20), 0, dp(8))
+                accessibilityHeadingCompat()
+            })
+            content.addView(Ui.text(this, body, 14f, Ui.muted).apply {
+                setTextIsSelectable(true)
+            })
+        }
+
+        fun link(label: String, url: String) {
+            content.addView(Ui.button(this, label) { openProjectLink(url) },
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+
+        section("简单连接，轻松用水",
+            "通过蓝牙连接水控设备，支持开始与结束会话、断线自动重连和一键连接上次设备。" +
+                "适用于 Android 8.0 及以上、支持 BLE 的手机。")
+        section("隐私与数据",
+            "应用不申请网络权限，不上传设备记录。连接偏好与上次设备记录通过 Android 本地偏好保存；" +
+                "运行日志用于排查连接问题，可在设置中关闭发送数据包的记录。")
+        section("开源项目", "本应用以 MIT 许可证开源。以下链接通过系统浏览器打开。")
+        link("项目主页与源码", REPO_URL)
+        link("版本更新与下载", "$REPO_URL/releases")
+        link("反馈问题", "$REPO_URL/issues")
+        link("查看 MIT 许可证", "$REPO_URL/blob/main/LICENSE")
+        section("协议来源与致谢",
+            "蓝牙协议移植自 celesWuff/waterctl 的 2.x 分支，以 Kotlin 实现。" +
+                "感谢上游作者对水控器 BLE 协议的分析与开源，相关版权与许可声明见项目 LICENSE。")
+        link("上游项目 · celesWuff/waterctl", UPSTREAM_URL)
+        section("使用说明与免责声明",
+            "仅用于操作已获授权的水控设备，请遵守设备管理方的规定。\n\n" +
+                "请勿用于非法用途；使用本程序造成的设备损坏、费用损失或其他后果，由使用者自行承担。\n\n" +
+                "本项目与水控设备厂商无关，也未获得其授权或认可。")
+
         AlertDialog.Builder(this)
             .setTitle("关于")
-            .setMessage(message)
-            .setPositiveButton("确定", null)
+            .setView(scroll)
+            .setPositiveButton("关闭", null)
             .show()
+    }
+
+    private fun TextView.accessibilityHeadingCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isAccessibilityHeading = true
+    }
+
+    private fun openProjectLink(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            })
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(this, "未找到可打开链接的浏览器", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun refreshStatus() {

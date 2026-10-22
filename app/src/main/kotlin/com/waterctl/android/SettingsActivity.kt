@@ -32,10 +32,8 @@ class SettingsActivity : Activity() {
         }
         scroll.addView(content)
         val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        bar.addView(Ui.button(this, "‹") { finish() }.apply {
-            textSize = 26f
-            contentDescription = "返回主界面"
-        }, LinearLayout.LayoutParams(dp(52), -2))
+        bar.addView(Ui.iconButton(this, R.drawable.ic_back, "返回主界面") { finish() },
+            LinearLayout.LayoutParams(dp(52), dp(52)))
         bar.addView(Ui.text(this, "设置", 26f, bold = true).apply {
             setPadding(dp(16), 0, 0, 0)
         })
