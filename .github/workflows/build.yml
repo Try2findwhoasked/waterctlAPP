@@ -50,14 +50,17 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Check Android lint
+        run: ./gradlew lintDebug --no-daemon
+
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: waterctl-android-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/*.apk   # 使用通配符，兼容未签名版本
-          if-no-files-found: warn                 # 找不到文件时仅警告，不中断整个流程
+            app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -65,12 +68,18 @@ jobs:
         with:
           files: |
             app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/*.apk   # 使用通配符
+            app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
+          fail_on_unmatched_files: true
           body: |
-            安卓原生版蓝牙水控器。
+            安卓原生版蓝牙水控器，1.0 系列 UI 完善版本。
 
-            - `app-release.apk` 或 `app-release-unsigned.apk`：发布版
+            - 统一青绿色卡片界面，突出连接状态与一键连接。
+            - 优化设备列表、空状态、扫描反馈与按钮可用状态。
+            - 小屏和大字体支持滚动，日志默认收起，设置页统一样式。
+            - 修复首次扫描权限顺序与 APK 发布附件匹配。
+
+            - `app-release.apk`：已签名发布版（推荐）
             - `app-debug.apk`：调试版
 
             要求 Android 8.0（API 26）及以上。安装前请先在系统设置中允许「安装未知来源应用」。

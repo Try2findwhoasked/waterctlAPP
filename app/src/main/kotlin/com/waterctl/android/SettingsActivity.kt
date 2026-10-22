@@ -1,164 +1,79 @@
 package com.waterctl.android
 
 import android.app.Activity
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.os.Build
+import android.content.res.ColorStateList
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsets
-import android.widget.Button
-import android.widget.CheckBox
 import android.widget.LinearLayout
-import android.widget.TextView
+import android.widget.ScrollView
+import android.widget.Switch
 
-/**
- * 设置页。目前只有一个开关：是否在日志中显示本机发送的数据包。
- *
- * 所有设置都是全局的（不区分设备），写入 [Prefs]；[BleService] 每次发包前重新读取
- * 偏好，因此切换后立即生效，进行中的会话也无需重连。
- */
+/** 全局设置写入 Prefs，进行中的会话也会立即读取新值。 */
 class SettingsActivity : Activity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildLayout())
     }
 
-    private fun dp(value: Int): Int =
-        TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value.toFloat(),
-            resources.displayMetrics,
-        ).toInt()
-
-    private fun rounded(bgColor: Int, radiusDp: Int = 10): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(bgColor)
-            cornerRadius = dp(radiusDp).toFloat()
-        }
-
-    /**
-     * targetSdk 35 起系统强制「边到边」绘制，内容会延伸进状态栏（刘海 / 挖孔所在区域）
-     * 与导航栏。这里把系统安全区换算成根布局的内边距，避免顶部被遮挡。
-     */
-    private fun applySystemInsets(view: View, left: Int, top: Int, right: Int, bottom: Int) {
-        view.setOnApplyWindowInsetsListener { v, insets ->
-            val l: Int
-            val t: Int
-            val r: Int
-            val b: Int
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val bars = insets.getInsets(
-                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
-                )
-                l = bars.left
-                t = bars.top
-                r = bars.right
-                b = bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                l = insets.systemWindowInsetLeft
-                @Suppress("DEPRECATION")
-                t = insets.systemWindowInsetTop
-                @Suppress("DEPRECATION")
-                r = insets.systemWindowInsetRight
-                @Suppress("DEPRECATION")
-                b = insets.systemWindowInsetBottom
-            }
-            v.setPadding(left + l, top + t, right + r, bottom + b)
-            insets
-        }
-        view.requestApplyInsets()
-    }
+    private fun dp(value: Int) = Ui.dp(this, value)
 
     private fun buildLayout(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F5F6F8"))
+            setBackgroundColor(Ui.canvas)
         }
-        applySystemInsets(root, dp(16), dp(16), dp(16), dp(16))
-
-        // ---- back bar ----
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val back = Button(this).apply {
-            text = "← 返回"
-            isAllCaps = false
-            textSize = 14f
-            minWidth = 0
-            minimumWidth = 0
-            setPadding(dp(8), 0, dp(8), 0)
-            setOnClickListener { finish() }
-        }
-        bar.addView(back)
-        bar.addView(
-            TextView(this).apply {
-                text = "设置"
-                textSize = 20f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(Color.parseColor("#212121"))
-                setPadding(dp(8), 0, 0, 0)
-            },
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        root.addView(bar)
-
-        // ---- packet logging ----
-        root.addView(sectionHeader("数据包"), topMargin(dp(18)))
-
-        val card = LinearLayout(this).apply {
+        Ui.insets(root)
+        val scroll = ScrollView(this)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), dp(8))
-            background = rounded(Color.parseColor("#FFFFFF"))
+            setPadding(dp(20), dp(16), dp(20), dp(24))
         }
-        card.addView(
-            CheckBox(this).apply {
-                text = "在日志中显示发送的数据包"
-                textSize = 15f
-                isChecked = Prefs.logPackets(this@SettingsActivity)
-                setPadding(0, dp(8), 0, dp(8))
-                setOnCheckedChangeListener { _, checked ->
-                    Prefs.setLogPackets(this@SettingsActivity, checked)
-                }
-            },
-        )
-        card.addView(
-            TextView(this).apply {
-                text = "开启后，日志会以 TX 前缀显示本机发出的每一条数据包（十六进制）。" +
-                    "关闭后不再记录，日志更简洁；接收到的数据包始终显示。"
-                textSize = 12f
-                setTextColor(Color.parseColor("#757575"))
-                setPadding(0, 0, 0, dp(8))
-            },
-        )
-        root.addView(
-            card,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-
+        scroll.addView(content)
+        val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        bar.addView(Ui.button(this, "‹") { finish() }.apply {
+            textSize = 26f
+            contentDescription = "返回主界面"
+        }, LinearLayout.LayoutParams(dp(52), -2))
+        bar.addView(Ui.text(this, "设置", 26f, bold = true).apply {
+            setPadding(dp(16), 0, 0, 0)
+        })
+        content.addView(bar)
+        content.addView(Ui.text(this, "按你的习惯，保留需要的信息", 14f, Ui.muted).apply {
+            setPadding(0, dp(20), 0, dp(24))
+        })
+        content.addView(Ui.text(this, "运行日志", 18f, bold = true).apply {
+            setPadding(0, 0, 0, dp(12))
+        })
+        val card = Ui.card(this)
+        card.addView(Switch(this).apply {
+            text = "记录发送的数据包"
+            textSize = 16f
+            setTextColor(Ui.ink)
+            minimumHeight = dp(56)
+            switchPadding = dp(12)
+            thumbTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(Ui.accent, android.graphics.Color.rgb(110, 129, 126)),
+            )
+            isChecked = Prefs.logPackets(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                Prefs.setLogPackets(this@SettingsActivity, checked)
+            }
+        })
+        card.addView(Ui.text(this,
+            "开启后，在日志中显示以 TX 标记的发送数据。关闭可精简日志，接收的数据仍会显示。",
+            14f, Ui.muted).apply { setPadding(0, dp(8), 0, 0) })
+        content.addView(card)
+        content.addView(Ui.text(this, "自动保存 · 立即生效，无需重新连接", 13f, Ui.accent).apply {
+            setPadding(dp(4), dp(16), dp(4), 0)
+        })
+        val privacy = Ui.card(this)
+        privacy.addView(Ui.text(this, "数据留在本机", 16f, bold = true))
+        privacy.addView(Ui.text(this, "应用只通过蓝牙与设备通信，不申请网络权限。设置与上次连接记录仅保存在本机。",
+            14f, Ui.muted).apply { setPadding(0, dp(8), 0, 0) })
+        content.addView(privacy, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         return root
     }
-
-    private fun sectionHeader(title: String): TextView =
-        TextView(this).apply {
-            text = title
-            textSize = 13f
-            setTextColor(Color.parseColor("#616161"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
-
-    private fun topMargin(margin: Int): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = margin }
 }

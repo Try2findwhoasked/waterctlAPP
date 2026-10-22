@@ -1,5 +1,7 @@
 package com.waterctl.android
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -247,9 +249,11 @@ class BleService : Service() {
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 val r = result ?: return
-                val name = r.scanRecord?.deviceName
-                    ?: r.device.name
-                    ?: "未知设备"
+                val name = r.scanRecord?.deviceName ?: try {
+                    r.device.name ?: "未知设备"
+                } catch (_: SecurityException) {
+                    "未知设备"
+                }
                 results[r.device.address] = name
             }
 
@@ -266,6 +270,8 @@ class BleService : Service() {
         handler.postDelayed({
             try {
                 s.stopScan(cb)
+            } catch (_: SecurityException) {
+                emitError("蓝牙扫描权限已撤销")
             } catch (_: Exception) {
             }
             val addresses = ArrayList(results.keys)
@@ -361,10 +367,18 @@ class BleService : Service() {
 
     fun getPhase(): Phase = phase
 
+    fun getDeviceName(): String = deviceName
+
     // ---- connection flow ----
 
     private fun attemptConnection() {
         if (stopping) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            emitError("蓝牙连接权限已撤销，请重新授予权限")
+            finishSession()
+            return
+        }
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
             // Bluetooth may simply be toggling; reschedule instead of dropping the
@@ -379,7 +393,13 @@ class BleService : Service() {
         cancelHandshake()
         scheduleHandshakeTimeout()
 
-        gatt?.close()
+        try {
+            gatt?.close()
+        } catch (_: SecurityException) {
+            emitError("蓝牙连接权限已撤销")
+            finishSession()
+            return
+        }
         gatt = null
         txd = null
         rxd = null
@@ -402,6 +422,9 @@ class BleService : Service() {
                 @Suppress("DEPRECATION")
                 device.connectGatt(this, false, gattCallback)
             }
+        } catch (e: SecurityException) {
+            emitError("蓝牙连接权限已撤销")
+            finishSession()
         } catch (e: Exception) {
             emitLog("connect failed: ${e.message}")
             onLinkLost()
@@ -411,9 +434,14 @@ class BleService : Service() {
     private fun onConnected(g: BluetoothGatt) {
         if (g !== gatt) return // stale callback from a superseded link
         emitLog("connected, discovering services...")
-        if (!g.discoverServices()) {
-            emitLog("discoverServices returned false")
-            onLinkLost()
+        try {
+            if (!g.discoverServices()) {
+                emitLog("discoverServices returned false")
+                onLinkLost()
+            }
+        } catch (_: SecurityException) {
+            emitError("蓝牙连接权限已撤销")
+            finishSession()
         }
     }
 
@@ -437,17 +465,22 @@ class BleService : Service() {
         txd = foundTxd
         rxd = foundRxd
 
-        // subscribe to RXD notifications
-        g.setCharacteristicNotification(foundRxd, true)
-        val cccd = foundRxd.getDescriptor(CCCD_UUID)
-        if (cccd != null) {
-            cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            g.writeDescriptor(cccd)
-        } else {
-            // no CCCD: proceed anyway
-            afterSubscribed(g)
+        // 订阅期间用户仍可能撤销权限，异步回调也必须处理。
+        try {
+            g.setCharacteristicNotification(foundRxd, true)
+            val cccd = foundRxd.getDescriptor(CCCD_UUID)
+            if (cccd != null) {
+                cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                g.writeDescriptor(cccd)
+            } else {
+                // no CCCD: proceed anyway
+                afterSubscribed(g)
+            }
+            emitLog("connect+subscribe ok ($deviceName)")
+        } catch (_: SecurityException) {
+            emitError("蓝牙连接权限已撤销")
+            finishSession()
         }
-        emitLog("connect+subscribe ok ($deviceName)")
     }
 
     private fun afterSubscribed(g: BluetoothGatt) {
@@ -556,10 +589,14 @@ class BleService : Service() {
     private fun teardownGatt() {
         try {
             gatt?.disconnect()
+        } catch (_: SecurityException) {
+            // 权限撤销后系统负责释放链路，仍需清空本地引用。
         } catch (_: Exception) {
         }
         try {
             gatt?.close()
+        } catch (_: SecurityException) {
+            // 不让清理失败阻止本地状态复位。
         } catch (_: Exception) {
         }
         gatt = null
@@ -581,6 +618,9 @@ class BleService : Service() {
             c.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             c.value = value
             g.writeCharacteristic(c)
+        } catch (_: SecurityException) {
+            emitError("蓝牙连接权限已撤销")
+            finishSession()
         } catch (e: Exception) {
             emitError("写入失败: ${e.message}")
             onLinkLost()

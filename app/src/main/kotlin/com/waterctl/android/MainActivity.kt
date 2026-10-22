@@ -15,15 +15,12 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsets
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.Button
@@ -45,6 +42,19 @@ class MainActivity : Activity() {
     private var service: BleService? = null
     private var bound = false
     private var pendingScan = false
+    private var scanning = false
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val scanTimeout = Runnable {
+        finishScan()
+        deviceEmptyHint.text = "扫描未完成，请确认蓝牙已开启后重试"
+    }
+
+    private fun finishScan() {
+        scanning = false
+        uiHandler.removeCallbacks(scanTimeout)
+        scanButton.text = "扫描设备"
+        applyPhase(currentPhase, "")
+    }
 
     private lateinit var statusText: TextView
     private lateinit var deviceText: TextView
@@ -60,7 +70,7 @@ class MainActivity : Activity() {
     private lateinit var logToggle: Button
     private lateinit var quickConnectButton: Button
 
-    private var logCollapsed = false
+    private var logCollapsed = true
 
     // last successfully started device, persisted across launches
     private var lastAddress: String = ""
@@ -77,7 +87,7 @@ class MainActivity : Activity() {
             bound = true
             refreshStatus()
             // if the user already tapped scan, continue once bound
-            if (pendingScan) {
+            if (pendingScan && hasScanPermissions()) {
                 pendingScan = false
                 doScan()
             }
@@ -106,9 +116,15 @@ class MainActivity : Activity() {
                 BleService.ACTION_ERROR -> {
                     val msg = intent.getStringExtra(BleService.EXTRA_MESSAGE) ?: ""
                     appendLog("[错误] $msg")
+                    if (scanning) {
+                        finishScan()
+                        deviceEmptyHint.text = "扫描失败\n$msg\n请检查蓝牙与权限后重试"
+                    }
+                    android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
                 }
 
                 BleService.ACTION_SCAN_RESULT -> {
+                    finishScan()
                     val addresses =
                         intent.getStringArrayListExtra(BleService.EXTRA_ADDRESSES) ?: ArrayList()
                     val names =
@@ -120,18 +136,21 @@ class MainActivity : Activity() {
                         deviceAddresses.add(addresses[i])
                     }
                     selectedIndex = -1
-                    deviceAdapter.notifyDataSetChanged()
-                    deviceEmptyHint.visibility =
-                        if (deviceNames.isEmpty()) View.VISIBLE else View.GONE
+                    deviceList.clearChoices()
+                    deviceEmptyHint.text = "未发现附近设备\n请靠近水控器，确认设备已开启后重新扫描"
+                    updateDeviceList()
                     appendLog("发现 ${addresses.size} 台设备")
                 }
             }
         }
     }
 
+    // 旧系统分支不支持接收器标记；API 33+ 已显式限制为应用内部广播。
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         loadLastDevice()
+        logCollapsed = savedInstanceState?.getBoolean("logCollapsed", true) ?: true
         setContentView(buildLayout())
         applyPhase("idle", "")
 
@@ -151,262 +170,162 @@ class MainActivity : Activity() {
 
     // ---- layout ----
 
-    private fun dp(value: Int): Int =
-        TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value.toFloat(),
-            resources.displayMetrics,
-        ).toInt()
+    private var currentPhase = "idle"
+    private var currentDevice = ""
+    private lateinit var deviceCount: TextView
 
-    private fun rounded(bgColor: Int, radiusDp: Int = 10): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(bgColor)
-            cornerRadius = dp(radiusDp).toFloat()
-        }
+    private fun dp(value: Int) = Ui.dp(this, value)
 
-    /**
-     * targetSdk 35 起系统强制「边到边」绘制，内容会延伸进状态栏（刘海 / 挖孔所在区域）
-     * 与导航栏，标题栏会被遮住。系统给出的安全区通过 WindowInsets 拿到，这里换算成
-     * 根布局的内边距，保证在任意挖孔屏上都不会被遮挡。
-     */
-    private fun applySystemInsets(view: View, left: Int, top: Int, right: Int, bottom: Int) {
-        view.setOnApplyWindowInsetsListener { v, insets ->
-            val l: Int
-            val t: Int
-            val r: Int
-            val b: Int
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val bars = insets.getInsets(
-                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
-                )
-                l = bars.left
-                t = bars.top
-                r = bars.right
-                b = bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                l = insets.systemWindowInsetLeft
-                @Suppress("DEPRECATION")
-                t = insets.systemWindowInsetTop
-                @Suppress("DEPRECATION")
-                r = insets.systemWindowInsetRight
-                @Suppress("DEPRECATION")
-                b = insets.systemWindowInsetBottom
-            }
-            v.setPadding(left + l, top + t, right + r, bottom + b)
-            insets
-        }
-        view.requestApplyInsets()
-    }
-
+    // 触摸监听只协调嵌套滚动并返回 false，点击仍交由原生控件处理。
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildLayout(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F5F6F8"))
+            setBackgroundColor(Ui.canvas)
         }
-        applySystemInsets(root, dp(16), dp(16), dp(16), dp(12))
-
-        // ---- title bar with the overflow menu ----
-        val titleBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        titleBar.addView(
-            TextView(this).apply {
-                text = "蓝牙水控器"
-                textSize = 20f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(Color.parseColor("#212121"))
-            },
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        titleBar.addView(
-            Button(this).apply {
-                text = "⋮"
-                textSize = 22f
-                isAllCaps = false
-                minWidth = 0
-                minimumWidth = 0
-                setPadding(dp(12), 0, dp(12), 0)
-                contentDescription = "更多"
-                setOnClickListener { showOverflowMenu(it) }
-            },
-        )
-        root.addView(
-            titleBar,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(12) },
-        )
-
-        // ---- status card ----
-        statusCard = LinearLayout(this).apply {
+        Ui.insets(root)
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            background = rounded(Color.parseColor("#FFFFFF"))
+            setPadding(dp(20), dp(16), dp(20), dp(24))
         }
-        statusText = TextView(this).apply {
-            textSize = 18f
-            setTextColor(Color.parseColor("#212121"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        scroll.addView(content)
+
+        val titleBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val title = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        title.addView(Ui.text(this, "蓝牙水控器", 26f, bold = true))
+        title.addView(Ui.text(this, "连接设备 · 轻松用水", 13f, Ui.muted))
+        titleBar.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        titleBar.addView(Ui.button(this, "⋮") { }.apply {
+            textSize = 24f
+            contentDescription = "更多选项：设置与关于"
+            setOnClickListener { showOverflowMenu(it) }
+        }, LinearLayout.LayoutParams(dp(52), -2))
+        content.addView(titleBar, margin(bottom = 24))
+
+        statusCard = Ui.card(this)
+        statusCard.addView(Ui.text(this, "连接状态", 12f, Ui.muted, true))
+        statusText = Ui.text(this, "", 25f, bold = true).apply {
+            setPadding(0, dp(8), 0, dp(4))
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        deviceText = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.parseColor("#757575"))
-            setPadding(0, dp(4), 0, 0)
-        }
+        deviceText = Ui.text(this, "", 14f, Ui.muted)
         statusCard.addView(statusText)
         statusCard.addView(deviceText)
-        root.addView(
-            statusCard,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(12) },
-        )
+        content.addView(statusCard, margin(bottom = 12))
 
-        // ---- action buttons (2 x 2) ----
-        scanButton = actionButton("扫描设备") { startScan() }
-        startButton = actionButton("开始会话") { startSelected() }
-        endButton = actionButton("结束会话") { endSession() }
-        stopButton = actionButton("停止重连") { hardStopSession() }
+        quickConnectButton = Ui.button(this, quickConnectLabel(), primary = true) { quickConnect() }
+        content.addView(quickConnectButton, margin(bottom = 20))
 
-        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row1.addView(scanButton, weightParams())
-        row1.addView(startButton, weightParams(leftMargin = 8))
-        root.addView(row1)
-
-        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row2.addView(endButton, weightParams(topMargin = 8))
-        row2.addView(stopButton, weightParams(topMargin = 8, leftMargin = 8))
-        root.addView(row2)
-
-        // ---- one-tap reconnect to the previously used device ----
-        quickConnectButton = actionButton(quickConnectLabel()) { quickConnect() }
-        root.addView(
-            quickConnectButton,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(8) },
-        )
-
-        // ---- device list header ----
-        root.addView(sectionHeader("可用设备"), topMargin(dp(14)))
-
-        // ---- device list ----
-        val listWrapper = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = rounded(Color.parseColor("#FFFFFF"))
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
-        deviceAdapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_activated_1,
-            deviceNames,
-        )
-        deviceList = ListView(this).apply {
-            divider = ColorDrawable(Color.parseColor("#EEEEEE"))
-            dividerHeight = dp(1)
-            choiceMode = ListView.CHOICE_MODE_SINGLE
-            setSelector(ColorDrawable(Color.parseColor("#BBDEFB")))
-        }
-        deviceList.adapter = deviceAdapter
-        deviceList.setOnItemClickListener { _, _, position, _ ->
-            if (position in deviceAddresses.indices) {
-                selectedIndex = position
-                deviceList.setItemChecked(position, true)
-                deviceText.text = "已选择: ${deviceNames[position].replace("\n", " ")}"
+        val deviceHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        deviceCount = Ui.text(this, "附近设备", 18f, bold = true)
+        deviceHeader.addView(deviceCount, LinearLayout.LayoutParams(0, -2, 1f))
+        scanButton = Ui.button(this, "扫描设备") { startScan() }
+        deviceHeader.addView(scanButton)
+        content.addView(deviceHeader, margin(bottom = 10))
+        val listWrapper = Ui.card(this).apply { setPadding(dp(8), dp(8), dp(8), dp(8)) }
+        deviceAdapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, deviceNames) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val row = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(16), dp(14), dp(16), dp(14))
+                    minimumHeight = dp(80)
+                    background = Ui.shape(this@MainActivity,
+                        if (position == selectedIndex) Color.rgb(227, 242, 238) else Color.WHITE, 14)
+                }
+                row.addView(Ui.text(this@MainActivity,
+                    (if (position == selectedIndex) "✓  " else "") + deviceNames[position].substringBefore("\n"),
+                    16f, if (position == selectedIndex) Ui.accent else Ui.ink, true))
+                row.addView(Ui.text(this@MainActivity, deviceAddresses[position], 12f, Ui.muted))
+                return row
             }
         }
-        deviceEmptyHint = TextView(this).apply {
-            text = "还没有设备，先点击「扫描设备」"
-            textSize = 13f
+        deviceList = ListView(this).apply {
+            divider = ColorDrawable(Ui.border)
+            dividerHeight = dp(1)
+            adapter = deviceAdapter
+            choiceMode = ListView.CHOICE_MODE_SINGLE
+        }
+        deviceList.setOnItemClickListener { _, _, position, _ ->
+            if (currentPhase == "idle" && position in deviceAddresses.indices) {
+                selectedIndex = position
+                deviceList.setItemChecked(position, true)
+                deviceAdapter.notifyDataSetChanged()
+                applyPhase(currentPhase, "")
+            }
+        }
+        // 列表自行滚动，外层页面仍可在小屏、横屏或大字体下访问全部操作。
+        deviceList.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> view.parent.requestDisallowInterceptTouchEvent(true)
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
+        listWrapper.addView(deviceList, LinearLayout.LayoutParams(-1, dp(240)))
+        deviceEmptyHint = Ui.text(this, "还没有发现设备\n点击「扫描设备」，查找附近的蓝牙水控器", 14f, Ui.muted).apply {
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#9E9E9E"))
-            setPadding(0, dp(24), 0, dp(24))
+            setPadding(dp(12), dp(32), dp(12), dp(32))
         }
-        listWrapper.addView(deviceList, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         listWrapper.addView(deviceEmptyHint)
-        root.addView(
-            listWrapper,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 3f),
-        )
+        content.addView(listWrapper, margin(bottom = 12))
+        startButton = Ui.button(this, "连接所选设备", primary = true) { startSelected() }
+        content.addView(startButton, margin(bottom = 8))
+        val actions = LinearLayout(this)
+        endButton = Ui.button(this, "结束会话", danger = true) { endSession() }
+        stopButton = Ui.button(this, "停止重连", danger = true) { hardStopSession() }
+        actions.addView(endButton, LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(stopButton, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
+        content.addView(actions, margin(bottom = 20))
 
-        // ---- log header with collapse toggle ----
-        val logHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        logHeader.addView(
-            sectionHeader("日志"),
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        logToggle = Button(this).apply {
-            text = "收起"
-            textSize = 12f
-            setOnClickListener { toggleLog() }
-        }
+        val logHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        logHeader.addView(Ui.text(this, "运行日志", 18f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        logToggle = Ui.button(this, "展开") { toggleLog() }
         logHeader.addView(logToggle)
-        root.addView(logHeader, topMargin(dp(14)))
-
-        // ---- log ----
+        content.addView(logHeader, margin(bottom = 10))
         logContainer = ScrollView(this).apply {
-            background = rounded(Color.parseColor("#FFFFFF"))
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = Ui.shape(this@MainActivity, Color.rgb(25, 47, 49), 20)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
         }
-        logText = TextView(this).apply {
-            textSize = 11f
-            setTextColor(Color.parseColor("#424242"))
+        logText = Ui.text(this, "日志将在扫描或连接后显示", 12f, Color.rgb(204, 230, 220)).apply {
             typeface = android.graphics.Typeface.MONOSPACE
             setTextIsSelectable(true)
-            setLineSpacing(0f, 1.15f)
         }
         logContainer.addView(logText)
-        root.addView(
-            logContainer,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 2f),
-        )
-
+        content.addView(logContainer, LinearLayout.LayoutParams(-1, dp(200)))
+        logContainer.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> view.parent.requestDisallowInterceptTouchEvent(true)
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
+        logContainer.visibility = if (logCollapsed) View.GONE else View.VISIBLE
+        logToggle.text = if (logCollapsed) "展开" else "收起"
+        content.addView(Ui.text(this, "仅使用蓝牙连接 · 数据保存在本机", 12f, Ui.muted).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(20), 0, 0)
+        })
+        updateDeviceList()
         return root
     }
 
-    private fun actionButton(label: String, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            textSize = 14f
-            minHeight = dp(44)
-            setOnClickListener { onClick() }
-        }
+    private fun margin(bottom: Int = 0) = LinearLayout.LayoutParams(-1, -2).apply {
+        bottomMargin = dp(bottom)
+    }
 
-    private fun weightParams(
-        topMargin: Int = 0,
-        leftMargin: Int = 0,
-    ): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            this.topMargin = topMargin
-            this.leftMargin = leftMargin
-        }
-
-    private fun sectionHeader(title: String): TextView =
-        TextView(this).apply {
-            text = title
-            textSize = 13f
-            setTextColor(Color.parseColor("#616161"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
-
-    private fun topMargin(margin: Int): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = margin }
+    private fun updateDeviceList() {
+        deviceAdapter.notifyDataSetChanged()
+        deviceList.visibility = if (deviceNames.isEmpty()) View.GONE else View.VISIBLE
+        deviceEmptyHint.visibility = if (deviceNames.isEmpty()) View.VISIBLE else View.GONE
+        deviceCount.text = if (deviceNames.isEmpty()) "附近设备" else "附近设备 · ${deviceNames.size}"
+        deviceList.layoutParams.height = dp(80 * deviceNames.size.coerceIn(1, 3))
+        deviceList.requestLayout()
+        applyPhase(currentPhase, "")
+    }
 
     private fun toggleLog() {
         logCollapsed = !logCollapsed
@@ -414,37 +333,46 @@ class MainActivity : Activity() {
         logToggle.text = if (logCollapsed) "展开" else "收起"
     }
 
-    // ---- phase / status rendering ----
-
     private fun applyPhase(phase: String, name: String) {
+        currentPhase = phase
+        if (name.isNotEmpty()) currentDevice = name
         val label = when (phase) {
-            "idle" -> "空闲"
-            "starting" -> "连接中…"
-            "active" -> "会话进行中"
+            "idle" -> "准备连接"
+            "starting" -> "正在连接…"
+            "active" -> "正在用水"
             "recovering" -> "正在重连…"
             "stopping" -> "正在结束…"
             else -> phase
         }
         val color = when (phase) {
-            "active" -> "#2E7D32"
-            "starting", "recovering" -> "#EF6C00"
-            "stopping" -> "#C62828"
-            else -> "#212121"
+            "starting", "recovering" -> Color.rgb(151, 94, 18)
+            "stopping" -> Color.rgb(170, 57, 57)
+            else -> Ui.accent
         }
-        statusText.text = "状态: $label"
-        statusText.setTextColor(Color.parseColor(color))
-        statusCard.background = rounded(Color.parseColor("#FFFFFF"))
-        if (name.isNotEmpty()) deviceText.text = "设备: $name"
-
+        statusText.text = label
+        statusText.setTextColor(color)
+        statusCard.background = Ui.shape(this,
+            if (phase == "active") Color.rgb(222, 242, 233) else Color.WHITE, stroke = Ui.border)
+        deviceText.text = when {
+            phase != "idle" -> currentDevice.ifEmpty { "正在与设备建立连接" }
+            selectedIndex in deviceNames.indices -> "已选择：${deviceNames[selectedIndex].substringBefore("\n")}"
+            else -> "扫描附近设备，或一键连接上次设备"
+        }
         val busy = phase != "idle"
         endButton.isEnabled = busy
-        stopButton.isEnabled = busy
-        scanButton.isEnabled = phase == "idle"
-        startButton.isEnabled = phase == "idle"
-        quickConnectButton.isEnabled = phase == "idle" && lastAddress.isNotEmpty()
+        stopButton.isEnabled = phase == "recovering"
+        scanButton.isEnabled = !busy && !scanning
+        deviceList.isEnabled = !busy && !scanning
+        startButton.isEnabled = !busy && !scanning && selectedIndex in deviceAddresses.indices
+        quickConnectButton.isEnabled = !busy && !scanning && lastAddress.isNotEmpty()
     }
 
     // ---- lifecycle ----
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("logCollapsed", logCollapsed)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onStart() {
         super.onStart()
@@ -469,6 +397,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null)
         try {
             unregisterReceiver(receiver)
         } catch (_: Exception) {
@@ -479,7 +408,14 @@ class MainActivity : Activity() {
     // ---- scan flow (every branch logs so problems are visible) ----
 
     private fun startScan() {
+        if (scanning || currentPhase != "idle") return
         appendLog("→ 开始扫描流程")
+        // Android 12+ 读取蓝牙状态本身也需要 CONNECT 权限，必须先申请。
+        if (!hasScanPermissions()) {
+            pendingScan = true
+            requestScanPermissions()
+            return
+        }
         if (!ensureBluetoothEnabled()) {
             appendLog("蓝牙未开启，请开启后重试")
             return
@@ -515,6 +451,11 @@ class MainActivity : Activity() {
             }
             return
         }
+        scanning = true
+        scanButton.text = "正在扫描…"
+        deviceEmptyHint.text = "正在查找附近设备…\n请将手机靠近水控器，扫描约需 3 秒"
+        applyPhase(currentPhase, "")
+        uiHandler.postDelayed(scanTimeout, 5_000)
         appendLog("→ 调用扫描")
         svc.scan()
     }
@@ -532,7 +473,7 @@ class MainActivity : Activity() {
                 grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             ) {
                 appendLog("→ 权限已授予，继续扫描")
-                doScan()
+                startScan()
             } else {
                 appendLog("权限被拒绝，无法扫描")
             }
@@ -540,6 +481,8 @@ class MainActivity : Activity() {
     }
 
     private fun ensureBluetoothEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return false
         val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = bm?.adapter
         if (adapter == null) {
@@ -704,9 +647,9 @@ class MainActivity : Activity() {
 
     private fun quickConnectLabel(): String =
         if (lastAddress.isEmpty()) {
-            "一键连接上次设备"
+            "暂无上次连接记录"
         } else {
-            "一键连接: $lastName"
+            "连接上次设备 · ${lastName.ifEmpty { lastAddress }}"
         }
 
     /** Start a session with the previously used device without scanning again. */
@@ -771,13 +714,14 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         val p = service?.getPhase()?.asStr ?: "idle"
-        applyPhase(p, "")
+        applyPhase(p, service?.getDeviceName().orEmpty())
     }
 
     private fun appendLog(msg: String) {
         runOnUiThread {
             val current = logText.text?.toString().orEmpty()
-            val lines = current.split("\n").filter { it.isNotEmpty() }.takeLast(200)
+                .takeUnless { it == "日志将在扫描或连接后显示" }.orEmpty()
+            val lines = current.split("\n").filter { it.isNotEmpty() }.takeLast(199)
             logText.text = (lines + msg).joinToString("\n")
             // keep the newest line visible
             logContainer.post { logContainer.fullScroll(View.FOCUS_DOWN) }
